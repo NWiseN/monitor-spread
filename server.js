@@ -1,4 +1,3 @@
-// ⚠️ Desativa verificação SSL — use apenas para testes
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 const express = require('express');
@@ -34,41 +33,60 @@ const pairs = [
 async function getPrices() {
   const results = [];
 
-  for (const pair of pairs) {
-    try {
-      const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
-        axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
-        axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers?contract=${pair.gate}`),
-        axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
-        axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.gate}`)
-      ]);
+  try {
+    const [gateSpotAll, gateFutAll] = await Promise.all([
+      axios.get(`https://api.gate.io/api/v4/spot/tickers`),
+      axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers`)
+    ]);
 
-      const gateSpot = parseFloat(gateSpotRes.data[0].last);
-      const gateFut = parseFloat(gateFutRes.data.last);
-      const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
-      const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
+    const gateSpotMap = {};
+    gateSpotAll.data.forEach(ticker => {
+      gateSpotMap[ticker.currency_pair] = parseFloat(ticker.last);
+    });
 
-      const gateSpread = ((gateFut - gateSpot) / gateSpot) * 100;
-      const mexcSpread = ((mexcFut - mexcSpot) / mexcSpot) * 100;
+    const gateFutMap = {};
+    gateFutAll.data.forEach(ticker => {
+      gateFutMap[ticker.contract] = parseFloat(ticker.last);
+    });
 
-      if (gateSpread >= 1 && mexcSpread >= 1) {
-        results.push({
-          pair: pair.name,
-          gate: {
-            spot: gateSpot,
-            future: gateFut,
-            spread: gateSpread
-          },
-          mexc: {
-            spot: mexcSpot,
-            future: mexcFut,
-            spread: mexcSpread
-          }
-        });
+    for (const pair of pairs) {
+      try {
+        const [mexcSpotRes, mexcFutRes] = await Promise.all([
+          axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
+          axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.gate}`)
+        ]);
+
+        const gateSpot = gateSpotMap[pair.gate];
+        const gateFut = gateFutMap[pair.gate];
+        const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
+        const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
+
+        if (!gateSpot || !gateFut) throw new Error('Dados da Gate.io ausentes');
+
+        const gateSpread = ((gateFut - gateSpot) / gateSpot) * 100;
+        const mexcSpread = ((mexcFut - mexcSpot) / mexcSpot) * 100;
+
+        if (gateSpread >= 1 && mexcSpread >= 1) {
+          results.push({
+            pair: pair.name,
+            gate: {
+              spot: gateSpot,
+              future: gateFut,
+              spread: gateSpread
+            },
+            mexc: {
+              spot: mexcSpot,
+              future: mexcFut,
+              spread: mexcSpread
+            }
+          });
+        }
+      } catch (innerError) {
+        console.error(`Erro ao processar ${pair.name}:`, innerError.message);
       }
-    } catch (error) {
-      console.error(`Erro ao buscar dados para ${pair.name}:`, error.message);
     }
+  } catch (error) {
+    console.error('Erro geral ao buscar dados da Gate.io:', error.message);
   }
 
   return results;
