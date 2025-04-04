@@ -6,9 +6,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static('public'));
 
 const pairs = [
-    { name: 'BTC/USDT', gate: 'BTC_USDT', mexc: 'BTCUSDT' },
-    { name: 'ETH/USDT', gate: 'ETH_USDT', mexc: 'ETHUSDT' },
-    { name: 'SOL/USDT', gate: 'SOL_USDT', mexc: 'SOLUSDT' },
+    { name: 'BTC/USDT', gate: 'BTC_USDT', gateFuture: 'BTC_USDT', mexc: 'BTCUSDT' },
+    { name: 'ETH/USDT', gate: 'ETH_USDT', gateFuture: 'ETH_USDT', mexc: 'ETHUSDT' },
+    { name: 'SOL/USDT', gate: 'SOL_USDT', gateFuture: 'SOL_USDT', mexc: 'SOLUSDT' },
 ];
 
 async function getPrices() {
@@ -17,13 +17,13 @@ async function getPrices() {
     for (const pair of pairs) {
         try {
             const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
-                axios.get(`https://fx-api.gateio.ws/api/v4/spot/tickers?currency_pair=${pair.gate}`),
-                axios.get(`https://fx-api.gateio.ws/api/v4/futures/usdt/tickers?contract=${pair.gate}`),
+                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
+                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers/${pair.gateFuture}`),
                 axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
-                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.gate}`)
+                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.mexc}`)
             ]);
 
-            const gateSpot = parseFloat(gateSpotRes.data[0].last);
+            const gateSpot = parseFloat(gateSpotRes.data.last);
             const gateFut = parseFloat(gateFutRes.data.last);
             const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
             const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
