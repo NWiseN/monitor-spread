@@ -1,69 +1,54 @@
-const express = require('express');
-const axios = require('axios');
-const app = express();
-const PORT = process.env.PORT || 3000;
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monitor de Spread</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        .card { border: 1px solid #ccc; padding: 20px; margin: 10px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <h1>🧠 Monitor de Spread Spot x Futuro</h1>
+    <div id="results"></div>
 
-app.use(express.static('public'));
+    <script>
+        async function fetchData() {
+            try {
+                const res = await fetch('/api/prices');
+                const data = await res.json();
 
-const pairs = [
-    { name: 'BTC/USDT', gate: 'BTC_USDT', gateFuture: 'BTC_USDT', mexc: 'BTCUSDT' },
-    { name: 'ETH/USDT', gate: 'ETH_USDT', gateFuture: 'ETH_USDT', mexc: 'ETHUSDT' },
-    { name: 'SOL/USDT', gate: 'SOL_USDT', gateFuture: 'SOL_USDT', mexc: 'SOLUSDT' },
-];
+                const container = document.getElementById('results');
+                container.innerHTML = '';
 
-async function getPrices() {
-    const results = [];
+                if (data.length === 0) {
+                    container.innerHTML = '<p>Sem oportunidades de arbitragem &gt; 1%.</p>';
+                    return;
+                }
 
-    for (const pair of pairs) {
-        try {
-            const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
-                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
-                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers/${pair.gateFuture}`),
-                axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
-                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.mexc}`)
-            ]);
+                data.forEach(item => {
+                    container.innerHTML += `
+                        <div class="card">
+                            <h2>${item.pair}</h2>
+                            <h3>Gate.io</h3>
+                            <p>Spot: $${item.gate.spot.toFixed(2)}</p>
+                            <p>Futuro: $${item.gate.future.toFixed(2)}</p>
+                            <p><strong>Spread:</strong> ${item.gate.spread.toFixed(2)}%</p>
 
-            const gateSpot = parseFloat(gateSpotRes.data.last);
-            const gateFut = parseFloat(gateFutRes.data.last);
-            const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
-            const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
-
-            const gateSpread = ((gateFut - gateSpot) / gateSpot) * 100;
-            const mexcSpread = ((mexcFut - mexcSpot) / mexcSpot) * 100;
-
-            if (gateSpread >= 1 && mexcSpread >= 1) {
-                results.push({
-                    pair: pair.name,
-                    gate: {
-                        spot: gateSpot,
-                        future: gateFut,
-                        spread: gateSpread
-                    },
-                    mexc: {
-                        spot: mexcSpot,
-                        future: mexcFut,
-                        spread: mexcSpread
-                    }
+                            <h3>MEXC</h3>
+                            <p>Spot: $${item.mexc.spot.toFixed(2)}</p>
+                            <p>Futuro: $${item.mexc.future.toFixed(2)}</p>
+                            <p><strong>Spread:</strong> ${item.mexc.spread.toFixed(2)}%</p>
+                        </div>
+                    `;
                 });
+            } catch (err) {
+                document.getElementById('results').innerHTML = '<p>Erro ao carregar dados.</p>';
+                console.error(err);
             }
-
-        } catch (error) {
-            console.error(`Erro ao buscar dados para ${pair.name}:`, error.message);
         }
-    }
 
-    return results;
-}
-
-app.get('/api/prices', async (req, res) => {
-    try {
-        const data = await getPrices();
-        res.json(data);
-    } catch {
-        res.status(500).json({ error: 'Erro ao buscar dados' });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+        fetchData();
+        setInterval(fetchData, 10000); // Atualiza a cada 10 segundos
+    </script>
+</body>
+</html>
