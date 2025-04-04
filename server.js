@@ -1,71 +1,60 @@
+// server.js
 const express = require("express");
-const axios = require("axios");
 const cors = require("cors");
+const axios = require("axios");
 
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 
 const pairs = [
-  "BTC/USDT", "ETH/USDT", "SOL/USDT", "OP/USDT", "AVAX/USDT", "APT/USDT",
-  "ARB/USDT", "XRP/USDT", "DOGE/USDT", "ADA/USDT", "LTC/USDT", "MATIC/USDT",
-  "PEPE/USDT", "INJ/USDT", "BNB/USDT", "WIF/USDT", "FLOKI/USDT", "TIA/USDT",
-  "1000SATS/USDT", "SEI/USDT", "GRT/USDT", "FTM/USDT", "RNDR/USDT",
-  "LDO/USDT", "SUI/USDT", "UNI/USDT", "RUNE/USDT", "DYDX/USDT", "CAKE/USDT",
-  "NEAR/USDT", "AAVE/USDT", "LINK/USDT", "FIL/USDT", "TRX/USDT", "XLM/USDT",
-  "ATOM/USDT", "ETC/USDT", "HBAR/USDT", "EGLD/USDT", "COMP/USDT", "ENS/USDT",
-  "KAVA/USDT", "CELO/USDT", "ALGO/USDT", "ZIL/USDT", "BCH/USDT", "STX/USDT",
-  "MINA/USDT", "GMX/USDT", "SAND/USDT"
+  "BTC/USDT", "ETH/USDT", "SOL/USDT", "OP/USDT", "AVAX/USDT",
+  "APT/USDT", "ARB/USDT", "XRP/USDT", "DOGE/USDT", "ADA/USDT",
+  "LTC/USDT", "MATIC/USDT", "PEPE/USDT", "INJ/USDT", "BNB/USDT",
+  "WIF/USDT", "FLOKI/USDT", "TIA/USDT", "1000SATS/USDT", "SEI/USDT",
+  "SHIB/USDT", "DYDX/USDT", "SUI/USDT", "GMT/USDT", "BCH/USDT",
+  "NEAR/USDT", "RNDR/USDT", "STX/USDT", "AAVE/USDT", "FIL/USDT",
+  "UNI/USDT", "CRV/USDT", "XLM/USDT", "FTM/USDT", "CAKE/USDT",
+  "ZIL/USDT", "MASK/USDT", "COMP/USDT", "ENS/USDT", "LDO/USDT",
+  "AGIX/USDT", "CFX/USDT", "WOO/USDT", "LUNA/USDT", "GALA/USDT",
+  "ONE/USDT", "TRX/USDT", "KAVA/USDT", "CHZ/USDT", "SAND/USDT"
 ];
 
-app.get("/spreads", async (req, res) => {
+async function getGatePrices(symbol) {
   try {
-    const headers = {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/117.0.0.0 Safari/537.36",
-      },
-    };
+    const market = symbol.replace("/", "_").toUpperCase();
 
-    const [gateSpotAll, gateFutAll] = await Promise.all([
-      axios.get("https://api.gate.io/api/v4/spot/tickers", headers),
-      axios.get("https://api.gate.io/api/v4/futures/usdt/tickers", headers),
+    const [spotRes, futuresRes] = await Promise.all([
+      axios.get(`https://api.gate.io/api2/1/ticker/${market}`),
+      axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers`)
     ]);
 
-    const gateSpotMap = {};
-    gateSpotAll.data.forEach((ticker) => {
-      gateSpotMap[ticker.currency_pair] = parseFloat(ticker.last);
-    });
+    const futureData = futuresRes.data.find(f => f.name === market.replace("_", "."));
 
-    const gateFutMap = {};
-    gateFutAll.data.forEach((ticker) => {
-      gateFutMap[ticker.contract] = parseFloat(ticker.last);
-    });
+    if (!futureData) return null;
 
-    const result = pairs.map((pair) => {
-      const spot = gateSpotMap[pair.replace("/", "_")];
-      const future = gateFutMap[pair.replace("/", "_")];
+    return {
+      pair: symbol,
+      spot: parseFloat(spotRes.data.last),
+      future: parseFloat(futureData.last),
+      spread: parseFloat((futureData.last - spotRes.data.last).toFixed(4)),
+      percentage: parseFloat(((futureData.last - spotRes.data.last) / spotRes.data.last * 100).toFixed(2))
+    };
+  } catch (err) {
+    console.error(`Erro ao buscar dados para ${symbol}:`, err.message);
+    return null;
+  }
+}
 
-      if (!spot || !future) return null;
-
-      const spread = ((future - spot) / spot) * 100;
-
-      return {
-        pair,
-        spot,
-        future,
-        spread: spread.toFixed(2),
-      };
-    }).filter(Boolean);
-
-    res.json(result);
-  } catch (error) {
-    console.error("Erro geral ao buscar dados da Gate.io:", error.message);
+app.get("/api/gate", async (req, res) => {
+  try {
+    const data = await Promise.all(pairs.map(getGatePrices));
+    res.json(data.filter(Boolean));
+  } catch (err) {
+    console.error("Erro geral ao buscar dados da Gate.io:", err.message);
     res.status(500).json({ error: "Erro ao buscar dados da Gate.io" });
   }
 });
 
-app.listen(port, () => {
-  console.log(`Servidor rodando na porta ${port}`);
-});
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
