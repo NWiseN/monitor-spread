@@ -1,14 +1,18 @@
 const express = require('express');
 const axios = require('axios');
+const https = require('https');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.static('public'));
 
+// Ignora verificação de SSL apenas para chamadas da Gate.io (teste)
+const agent = new https.Agent({ rejectUnauthorized: false });
+
 const pairs = [
-    { name: 'BTC/USDT', gate: 'BTC_USDT', gateFuture: 'BTC_USDT', mexc: 'BTCUSDT' },
-    { name: 'ETH/USDT', gate: 'ETH_USDT', gateFuture: 'ETH_USDT', mexc: 'ETHUSDT' },
-    { name: 'SOL/USDT', gate: 'SOL_USDT', gateFuture: 'SOL_USDT', mexc: 'SOLUSDT' },
+    { name: 'BTC/USDT', gate: 'BTC_USDT', mexc: 'BTCUSDT' },
+    { name: 'ETH/USDT', gate: 'ETH_USDT', mexc: 'ETHUSDT' },
+    { name: 'SOL/USDT', gate: 'SOL_USDT', mexc: 'SOLUSDT' },
 ];
 
 async function getPrices() {
@@ -17,13 +21,13 @@ async function getPrices() {
     for (const pair of pairs) {
         try {
             const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
-                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
-                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers/${pair.gateFuture}`),
+                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`, { httpsAgent: agent }),
+                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers?contract=${pair.gate}`, { httpsAgent: agent }),
                 axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
-                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.mexc}`)
+                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.gate}`)
             ]);
 
-            const gateSpot = parseFloat(gateSpotRes.data.last);
+            const gateSpot = parseFloat(gateSpotRes.data[0].last);
             const gateFut = parseFloat(gateFutRes.data.last);
             const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
             const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
@@ -31,6 +35,7 @@ async function getPrices() {
             const gateSpread = ((gateFut - gateSpot) / gateSpot) * 100;
             const mexcSpread = ((mexcFut - mexcSpot) / mexcSpot) * 100;
 
+            // Adiciona somente se spread >= 1% em ambas
             if (gateSpread >= 1 && mexcSpread >= 1) {
                 results.push({
                     pair: pair.name,
