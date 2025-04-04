@@ -1,54 +1,104 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Monitor de Spread</title>
-    <style>
-        body { font-family: Arial; padding: 20px; }
-        .card { border: 1px solid #ccc; padding: 20px; margin: 10px; border-radius: 10px; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Monitor de Arbitragem</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 20px;
+      color: #00FFAA;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: center;
+    }
+    th {
+      background-color: #1f1f1f;
+      color: #00FFAA;
+    }
+    tr:nth-child(even) {
+      background-color: #1a1a1a;
+    }
+    tr:hover {
+      background-color: #333;
+    }
+    .positive {
+      color: #00FF00;
+      font-weight: bold;
+    }
+    .negative {
+      color: #FF4444;
+    }
+  </style>
 </head>
 <body>
-    <h1>🧠 Monitor de Spread Spot x Futuro</h1>
-    <div id="results"></div>
+  <h1>🧠 Monitor de Spread Spot x Futuro</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>Par</th>
+        <th>Exchange</th>
+        <th>Spot</th>
+        <th>Futuro</th>
+        <th>Spread (%)</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+      <tr><td colspan="5">Carregando...</td></tr>
+    </tbody>
+  </table>
 
-    <script>
-        async function fetchData() {
-            try {
-                const res = await fetch('/api/prices');
-                const data = await res.json();
+  <script>
+    async function fetchData() {
+      try {
+        const res = await fetch('/api/prices');
+        const data = await res.json();
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
 
-                const container = document.getElementById('results');
-                container.innerHTML = '';
-
-                if (data.length === 0) {
-                    container.innerHTML = '<p>Sem oportunidades de arbitragem &gt; 1%.</p>';
-                    return;
-                }
-
-                data.forEach(item => {
-                    container.innerHTML += `
-                        <div class="card">
-                            <h2>${item.pair}</h2>
-                            <h3>Gate.io</h3>
-                            <p>Spot: $${item.gate.spot.toFixed(2)}</p>
-                            <p>Futuro: $${item.gate.future.toFixed(2)}</p>
-                            <p><strong>Spread:</strong> ${item.gate.spread.toFixed(2)}%</p>
-
-                            <h3>MEXC</h3>
-                            <p>Spot: $${item.mexc.spot.toFixed(2)}</p>
-                            <p>Futuro: $${item.mexc.future.toFixed(2)}</p>
-                            <p><strong>Spread:</strong> ${item.mexc.spread.toFixed(2)}%</p>
-                        </div>
-                    `;
-                });
-            } catch (err) {
-                document.getElementById('results').innerHTML = '<p>Erro ao carregar dados.</p>';
-                console.error(err);
-            }
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5">Nenhum par com spread >= 1%</td></tr>';
+          return;
         }
 
-        fetchData();
-        setInterval(fetchData, 10000); // Atualiza a cada 10 segundos
-    </script>
+        data.forEach(item => {
+          ['gate', 'mexc'].forEach(exchange => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+              <td>${item.pair}</td>
+              <td>${exchange.toUpperCase()}</td>
+              <td>$${item[exchange].spot.toFixed(4)}</td>
+              <td>$${item[exchange].future.toFixed(4)}</td>
+              <td class="${item[exchange].spread >= 1 ? 'positive' : 'negative'}">
+                ${item[exchange].spread.toFixed(2)}%
+              </td>
+            `;
+            tbody.appendChild(row);
+          });
+        });
+
+      } catch (err) {
+        console.error(err);
+        document.getElementById('table-body').innerHTML =
+          '<tr><td colspan="5">Erro ao carregar dados</td></tr>';
+      }
+    }
+
+    fetchData();
+    setInterval(fetchData, 5000); // Atualiza a cada 5 segundos
+  </script>
 </body>
 </html>
