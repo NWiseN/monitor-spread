@@ -17,8 +17,8 @@ async function getPrices() {
     for (const pair of pairs) {
         try {
             const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
-                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
-                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers?contract=${pair.gate}`),
+                axios.get(`https://fx-api.gateio.ws/api/v4/spot/tickers?currency_pair=${pair.gate}`),
+                axios.get(`https://fx-api.gateio.ws/api/v4/futures/usdt/tickers?contract=${pair.gate}`),
                 axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
                 axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.gate}`)
             ]);
