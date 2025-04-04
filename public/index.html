@@ -1,48 +1,69 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Monitor de Spread</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }
-        h1 { color: #333; }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+const express = require('express');
+const axios = require('axios');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.static('public'));
+
+const pairs = [
+    { name: 'BTC/USDT', gate: 'BTC_USDT', gateFuture: 'BTC_USDT', mexc: 'BTCUSDT' },
+    { name: 'ETH/USDT', gate: 'ETH_USDT', gateFuture: 'ETH_USDT', mexc: 'ETHUSDT' },
+    { name: 'SOL/USDT', gate: 'SOL_USDT', gateFuture: 'SOL_USDT', mexc: 'SOLUSDT' },
+];
+
+async function getPrices() {
+    const results = [];
+
+    for (const pair of pairs) {
+        try {
+            const [gateSpotRes, gateFutRes, mexcSpotRes, mexcFutRes] = await Promise.all([
+                axios.get(`https://api.gate.io/api/v4/spot/tickers?currency_pair=${pair.gate}`),
+                axios.get(`https://api.gate.io/api/v4/futures/usdt/tickers/${pair.gateFuture}`),
+                axios.get(`https://api.mexc.com/api/v3/ticker/bookTicker?symbol=${pair.mexc}`),
+                axios.get(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair.mexc}`)
+            ]);
+
+            const gateSpot = parseFloat(gateSpotRes.data.last);
+            const gateFut = parseFloat(gateFutRes.data.last);
+            const mexcSpot = parseFloat(mexcSpotRes.data.askPrice);
+            const mexcFut = parseFloat(mexcFutRes.data.data.lastPrice);
+
+            const gateSpread = ((gateFut - gateSpot) / gateSpot) * 100;
+            const mexcSpread = ((mexcFut - mexcSpot) / mexcSpot) * 100;
+
+            if (gateSpread >= 1 && mexcSpread >= 1) {
+                results.push({
+                    pair: pair.name,
+                    gate: {
+                        spot: gateSpot,
+                        future: gateFut,
+                        spread: gateSpread
+                    },
+                    mexc: {
+                        spot: mexcSpot,
+                        future: mexcFut,
+                        spread: mexcSpread
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error(`Erro ao buscar dados para ${pair.name}:`, error.message);
         }
-        .pair { font-weight: bold; font-size: 18px; margin-bottom: 10px; }
-    </style>
-</head>
-<body>
-    <h1>🧠 Monitor de Spread Spot x Futuro</h1>
-    <div id="container"></div>
+    }
 
-    <script>
-        async function fetchData() {
-            const res = await fetch('/api/prices');
-            const data = await res.json();
+    return results;
+}
 
-            const container = document.getElementById('container');
-            container.innerHTML = '';
+app.get('/api/prices', async (req, res) => {
+    try {
+        const data = await getPrices();
+        res.json(data);
+    } catch {
+        res.status(500).json({ error: 'Erro ao buscar dados' });
+    }
+});
 
-            data.forEach(item => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.innerHTML = `
-                    <div class="pair">${item.pair}</div>
-                    <div><strong>Gate.io</strong></div>
-                    <p>Spot: $${item.gate.spot.toFixed(2)} | Futuro: $${item.gate.future.toFixed(2)} | Spread: ${item.gate.spread.toFixed(2)}%</p>
-                    <div><strong>MEXC</strong></div>
-                    <p>Spot: $${item.mexc.spot.toFixed(2)} | Futuro: $${item.mexc.future.toFixed(2)} | Spread: ${item.mexc.spread.toFixed(2)}%</p>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        fetchData();
-        setInterval(fetchData, 5000);
-    </script>
-</body>
-</html>
+app.listen(PORT, () => {
+    console.log(`Servidor rodando em http://localhost:${PORT}`);
+});
